@@ -32,6 +32,7 @@ do
 		db.profile.position[4] = d
 	end)
 	local function openOpts()
+		EnableAddOn("Capping_Options") -- Make sure it wasn't left disabled for whatever reason
 		LoadAddOn("Capping_Options")
 		LibStub("AceConfigDialog-3.0"):Open(addonName)
 	end
@@ -60,20 +61,19 @@ function mod:UnregisterEvent(event)
 	frame:UnregisterEvent(event)
 end
 
-function mod:START_TIMER(timerType, timeSeconds, totalTime)
+function mod:START_TIMER(_, timeSeconds)
 	local _, t = GetInstanceInfo()
 	if t == "pvp" or t == "arena" then
-		--if db.profile.hideblizztime then
-		--	for a, timer in pairs(TimerTracker.timerList) do
-		--		timer:Hide()
-		--	end
-		--end
+		for i = 1, #TimerTracker.timerList do
+			TimerTracker.timerList[i].bar:Hide() -- Hide the Blizz start timer
+		end
+
 		local faction = GetPlayerFactionGroup()
 		if faction and faction ~= "Neutral" then
-			local bar = self:GetBar(L["Battle Begins"])
+			local bar = self:GetBar(L.battleBegins)
 			if not bar or timeSeconds > bar.remaining+3 or timeSeconds < bar.remaining-3 then -- Don't restart bars for subtle changes +/- 3s
-				-- 516953 = Interface/Timer/Horde-Logo || 516949 = Interface/Timer/Alliance-Logo
-				mod:StartBar(L["Battle Begins"], timeSeconds, faction == "Horde" and 516953 or 516949, "colorOther")
+				-- 132485 = Interface/Icons/INV_BannerPVP_01 || 132486 = Interface/Icons/INV_BannerPVP_02
+				mod:StartBar(L.battleBegins, timeSeconds, faction == "Horde" and 132485 or 132486, "colorOther")
 			end
 		end
 	end
@@ -88,11 +88,14 @@ function mod:PLAYER_LOGIN()
 			fontSize = 10,
 			barTexture = "Blizzard Raid Bar",
 			outline = "NONE",
+			monochrome = false,
 			font = media:GetDefault("font"),
 			width = 200,
 			height = 20,
 			icon = true,
 			timeText = true,
+			fill = false,
+			growUp = false,
 			spacing = 0,
 			alignText = "LEFT",
 			alignTime = "RIGHT",
@@ -103,6 +106,10 @@ function mod:PLAYER_LOGIN()
 			colorQueue = {0.6,0.6,0.6,1},
 			colorOther = {1,1,0,1},
 			colorBarBackground = {0,0,0,0.75},
+			queueBars = true,
+			barOnShift = "SAY",
+			barOnControl = "INSTANCE_CHAT",
+			barOnAlt = "NONE",
 		},
 	}
 	db = LibStub("AceDB-3.0"):New("CappingSettings", defaults, true)
@@ -121,9 +128,15 @@ function mod:PLAYER_LOGIN()
 
 	if db.profile.lock then
 		frame:EnableMouse(false)
+		frame:SetMovable(false)
 		frame.bg:Hide()
 		frame.header:Hide()
 	end
+
+	-- Fix flag carriers for some people
+	SetCVar("showArenaEnemyCastbar", "1")
+	SetCVar("showArenaEnemyFrames", "1")
+	SetCVar("showArenaEnemyPets", "1")
 
 	self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 	self:RegisterEvent("UPDATE_BATTLEFIELD_STATUS")
@@ -204,9 +217,8 @@ do -- estimated wait timer and port timer
 	end
 
 	function mod:UPDATE_BATTLEFIELD_STATUS(queueId)
-		--if not db.profile.port and not db.profile.wait then return end
-
 		local status, map, _, _, _, size = GetBattlefieldStatus(queueId)
+
 		if size == "ARENASKIRMISH" then
 			map = format("%s (%d)", ARENA, queueId) -- No size or name distinction given for casual arena 2v2/3v3, separate them manually. Messy :(
 		end
@@ -218,11 +230,11 @@ do -- estimated wait timer and port timer
 				bar = nil
 			end
 
-			if not bar then --and db.profile.port then
+			if not bar then
 				bar = self:StartBar(map, GetBattlefieldPortExpiration(queueId), 132327, "colorOther", true) -- 132327 = Interface/Icons/Ability_TownWatch
 				bar:Set("capping:queueid", queueId)
 			end
-		elseif status == "queued" then --and db.profile.wait then -- Waiting for BG to pop
+		elseif status == "queued" and map and db.profile.queueBars then -- Waiting for BG to pop
 			if size == "ARENASKIRMISH" then
 				cleanupQueue()
 			end
@@ -268,9 +280,9 @@ do -- estimated wait timer and port timer
 		elseif status == "active" then -- Inside BG
 			-- We can't directly call :StopBar(map) as it doesn't work for random BGs.
 			-- A random BG will adopt the zone name when it changes to "active" E.g. Random Battleground > Arathi Basin
+			-- Also sometimes when queue 1 becomes active and you are in 2 queues, they will swap ID, because why not...
 			for bar in next, activeBars do
-				local id = bar:Get("capping:queueid")
-				if id == queueId then
+				if bar:Get("capping:queueid") and bar:Get("capping:colorid") == "colorOther" then
 					bar:Stop()
 					break
 				end
@@ -298,13 +310,16 @@ do
 			local faction = colorid == "colorHorde" and _G.FACTION_HORDE or colorid == "colorAlliance" and _G.FACTION_ALLIANCE or ""
 			local timeLeft = bar.candyBarDuration:GetText()
 			if not timeLeft:find("[:%.]") then timeLeft = "0:"..timeLeft end
+			if channel == "INSTANCE_CHAT" and not IsInGroup(2) then channel = "RAID" end -- LE_PARTY_CATEGORY_INSTANCE = 2
 			SendChatMessage(format("Capping: %s - %s %s", bar:GetLabel(), timeLeft, faction == "" and faction or "("..faction..")"), channel)
 		end
 		function BarOnClick(bar)
-			if IsShiftKeyDown() then
-				ReportBar(bar, "SAY")
-			elseif IsControlKeyDown() then
-				ReportBar(bar, IsInGroup(2) and "INSTANCE_CHAT" or "RAID") -- LE_PARTY_CATEGORY_INSTANCE = 2
+			if IsShiftKeyDown() and db.profile.barOnShift ~= "NONE" then
+				ReportBar(bar, db.profile.barOnShift)
+			elseif IsControlKeyDown() and db.profile.barOnControl ~= "NONE" then
+				ReportBar(bar, db.profile.barOnControl)
+			elseif IsAltKeyDown() and db.profile.barOnAlt ~= "NONE" then
+				ReportBar(bar, db.profile.barOnAlt)
 			end
 		end
 	end
@@ -397,6 +412,11 @@ do
 		bar.candyBarLabel:SetFont(media:Fetch("font", db.profile.font), db.profile.fontSize, flags)
 		bar.candyBarDuration:SetFont(media:Fetch("font", db.profile.font), db.profile.fontSize, flags)
 		bar:SetScript("OnMouseUp", BarOnClick)
+		if db.profile.barOnShift ~= "NONE" or db.profile.barOnControl ~= "NONE" or db.profile.barOnAlt ~= "NONE" then
+			bar:EnableMouse(true)
+		else
+			bar:EnableMouse(false)
+		end
 		bar:Start()
 		RearrangeBars()
 		return bar
