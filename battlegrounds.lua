@@ -386,12 +386,13 @@ do
 
 		-- setup for final score estimation (2 for EotS)
 		NewEstimator(pointsPerSecond, 523, 524) -- BG table, alliance score widget, horde score widget
-		SetupAssault(60, 112) -- In RBG the four points have flags that need to be assaulted, like AB
+		SetupAssault(60, 397) -- In RBG the four points have flags that need to be assaulted, like AB
 		self:RegisterTempEvent("CHAT_MSG_BG_SYSTEM_HORDE", "FlagUpdate")
 		self:RegisterTempEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE", "FlagUpdate")
 		self:RegisterTempEvent("RAID_BOSS_WHISPER", "CheckForGravity")
 	end
 	mod:AddBG(566, EyeOfTheStorm)
+	mod:AddBG(968, EyeOfTheStorm)
 end
 
 do
