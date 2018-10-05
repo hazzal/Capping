@@ -334,7 +334,7 @@ end
 
 do
 	------------------------------------------------ Eye of the Storm -------------------------------------------------
-	local pointsPerSecond = {1, 1.5, 2, 6} -- Updates every 2 seconds
+	local pointsPerSecond = {1, 1.5, 2, 3.5} -- Updates every 2 seconds
 
 	local function EyeOfTheStorm(self)
 		if not mod.FlagUpdate then
@@ -386,13 +386,28 @@ do
 
 		-- setup for final score estimation (2 for EotS)
 		NewEstimator(pointsPerSecond, 523, 524) -- BG table, alliance score widget, horde score widget
+		self:RegisterTempEvent("CHAT_MSG_BG_SYSTEM_HORDE", "FlagUpdate")
+		self:RegisterTempEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE", "FlagUpdate")
+		self:RegisterTempEvent("RAID_BOSS_WHISPER", "CheckForGravity")
+	end
+	local function EyeOfTheStormRated(self)
+		if not mod.FlagUpdate then
+			function mod:FlagUpdate(msg)
+				local found = strmatch(msg, L.takenTheFlagTrigger)
+				if (found and found == "L'Alliance") or strmatch(msg, L.capturedTheTrigger) then -- frFR
+					self:StartBar(L.flagRespawns, 21, GetIconData(45), "colorOther") -- 45 = White flag
+				end
+				self:UpdateBases()
+			end
+		end
+		NewEstimator(pointsPerSecond, 704, 705) -- BG table, alliance score widget, horde score widget
 		SetupAssault(60, 397) -- In RBG the four points have flags that need to be assaulted, like AB
 		self:RegisterTempEvent("CHAT_MSG_BG_SYSTEM_HORDE", "FlagUpdate")
 		self:RegisterTempEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE", "FlagUpdate")
 		self:RegisterTempEvent("RAID_BOSS_WHISPER", "CheckForGravity")
 	end
 	mod:AddBG(566, EyeOfTheStorm)
-	mod:AddBG(968, EyeOfTheStorm)
+	mod:AddBG(968, EyeOfTheStormRated)
 end
 
 do
